@@ -1,0 +1,20 @@
+# Databricks bundle local state
+.databricks/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local secrets and environment files (never commit tokens)
+.env
+*.token
+.databrickscfg
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
