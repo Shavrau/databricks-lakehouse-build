@@ -1,0 +1,21 @@
+resources:
+  jobs:
+    gold_quality_check:
+      name: "[${bundle.target}] Gold Quality Checks Job"
+      tasks:
+        - task_key: run_gold_views_ddl
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/gold/gold_views.sql
+            parameters:
+              catalog: ${var.catalog}
+        - task_key: run_quality_checks
+          depends_on:
+            - task_key: run_gold_views_ddl
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/gold/quality_checks.sql
+            parameters:
+              catalog: ${var.catalog}

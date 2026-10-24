@@ -15,3 +15,5 @@ resources:
             path: ../src/bronze/bronze_tables.py
         - file:
             path: ../src/silver/silver_tables.py
+        - file:
+            path: ../src/gold/gold_etl_tables.py
