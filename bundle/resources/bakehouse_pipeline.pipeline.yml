@@ -1,0 +1,15 @@
+resources:
+  pipelines:
+    bakehouse_pipeline:
+      name: "[${bundle.target}] Bakehouse Medallion Pipeline"
+      target: bronze
+      catalog: ${var.catalog}
+      channel: preview
+      serverless: true
+      configuration:
+        bakehouse.catalog: ${var.catalog}
+        pipelines.numUpdateRetryAttempts: "0"
+        pipelines.maxFlowRetryAttempts: "0"
+      libraries:
+        - file:
+            path: ../src/bronze/bronze_tables.py

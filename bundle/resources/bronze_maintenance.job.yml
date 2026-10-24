@@ -1,0 +1,12 @@
+resources:
+  jobs:
+    bronze_maintenance:
+      name: "[${bundle.target}] Bronze Maintenance Job"
+      tasks:
+        - task_key: run_maintenance_sql
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/bronze/maintenance.sql
+            parameters:
+              catalog: ${var.catalog}
