@@ -1,0 +1,60 @@
+resources:
+  jobs:
+    bakehouse_master_orchestration:
+      name: "[${bundle.target}] Bakehouse Master Lakehouse Orchestrator"
+      tags:
+        project: bakehouse
+        environment: ${bundle.target}
+        tier: critical
+        layer: master
+
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+
+      tasks:
+        - task_key: refresh_medallion_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.bakehouse_pipeline.id}
+            full_refresh: false
+
+        - task_key: run_gold_views_ddl
+          depends_on:
+            - task_key: refresh_medallion_pipeline
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/gold/gold_views.sql
+            parameters:
+              catalog: ${var.catalog}
+
+        - task_key: run_quality_checks
+          depends_on:
+            - task_key: run_gold_views_ddl
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/gold/quality_checks.sql
+            parameters:
+              catalog: ${var.catalog}
+
+        - task_key: run_silver_maintenance
+          depends_on:
+            - task_key: run_quality_checks
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/silver/maintenance.sql
+            parameters:
+              catalog: ${var.catalog}
+
+        - task_key: run_bronze_maintenance
+          depends_on:
+            - task_key: run_silver_maintenance
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/bronze/maintenance.sql
+            parameters:
+              catalog: ${var.catalog}
