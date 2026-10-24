@@ -233,9 +233,13 @@ I will add only the tools that a step actually needs, and tell you when I do.
 | Date | Step | Result |
 |---|---|---|
 | 2026-10-24 | Plan approved | You answered yes to all four questions in §7 |
-| 2026-10-24 | 0.1 CLI login | `databricks auth login --profile dev` started. Waiting for you to complete the browser login |
+| 2026-10-24 | 0.1 CLI login | Profile `dev` authenticated and valid (`https://dbc-654c8244-a596.cloud.databricks.com`) |
 | 2026-10-24 | Git | Repository initialised on branch `main`, with a `.gitignore` that excludes `.databricks/`, `.env` and token files |
-| 2026-10-24 | 0.2 Skills | **13 official skills installed into the project** at `.agents/skills/`, from `databricks-agent-skills` v0.2.10 (see below) |
+| 2026-10-24 | 0.2 Skills | **13 official skills installed into the project** at `.agents/skills/`, from `databricks-agent-skills` v0.2.10 |
+| 2026-10-24 | 0.3-0.4 Checks | AWS `us-east-2`, metastore `metastore_aws_us_east_2`, Predictive Optimization `ENABLE`. `samples.bakehouse` verified: 300 customers, 48 franchises (no time zone), 48 suppliers, 3333 transactions (3 duplicate IDs found!). Earliest transaction: `2024-05-01 00:03:28 UTC` |
+| 2026-10-24 | 0.5 Bundle skeleton | `bundle/databricks.yml` created, validated OK for both `dev` and `prod` targets |
+| 2026-10-24 | 0.6 Catalogs & Volumes | Created `bakehouse_dev`, `bakehouse_prod` (schemas `landing`, `bronze`, `silver`, `gold`), managed volumes `extracts`, and 5 workspace groups |
+| 2026-10-24 | 0.7 Gate G0 | [Foundation Readiness Record](02_foundation_kickoff/foundation_readiness_record.md) signed off. Gate G0 PASSED |
 
 ### Skills installed (project scope)
 

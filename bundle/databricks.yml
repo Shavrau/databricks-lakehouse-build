@@ -1,0 +1,25 @@
+bundle:
+  name: bakehouse-lakehouse
+
+variables:
+  catalog:
+    default: bakehouse_dev
+  warehouse_id:
+    default: 3c88b7bfb51daab1
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      profile: dev
+    variables:
+      catalog: bakehouse_dev
+
+  prod:
+    mode: production
+    workspace:
+      profile: dev
+      root_path: /Workspace/Users/rhian.souza@programmers.com.br/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: bakehouse_prod
