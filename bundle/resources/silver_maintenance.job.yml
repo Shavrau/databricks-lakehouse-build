@@ -1,0 +1,12 @@
+resources:
+  jobs:
+    silver_maintenance:
+      name: "[${bundle.target}] Silver Maintenance Job"
+      tasks:
+        - task_key: run_silver_maintenance_sql
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/silver/maintenance.sql
+            parameters:
+              catalog: ${var.catalog}

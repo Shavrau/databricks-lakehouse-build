@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
 Generate Landing Extracts from samples.bakehouse into Unity Catalog Volumes.
-Implements the 'Snapshot then Incremental' pattern for Phase 3 Bronze.
+Supports:
+  - batch1: Historical snapshot (80% boundary) for transactions and baseline dimensions.
+  - batch2: Incremental replay for transactions (remaining 20%).
+  - dim_batch2: Evolution batch for dimensions (5 updated customers, 3 new customers, 1 missing supplier).
+  - dim_batch3: Second evolution batch (1 re-updated customer, 1 reactivated supplier, 1 updated franchise).
 """
 import argparse
 import csv
@@ -126,7 +130,7 @@ def stage_batch1(w: WorkspaceClient, catalog: str, warehouse_id: str):
     print(f"Uploaded {len(data)} rows to {path}")
 
     # 4. Suppliers Snapshot
-    print("Exporting Suppliers Snapshot (48 rows)...")
+    print("Exporting Suppliers Snapshot (27 rows)...")
     supp_query = """
         SELECT supplierID, name, ingredient, continent, city, district, size, longitude, latitude, approved
         FROM samples.bakehouse.sales_suppliers
@@ -140,10 +144,6 @@ def stage_batch1(w: WorkspaceClient, catalog: str, warehouse_id: str):
 
     # 5. Franchise Time Zones Reference Seed
     print("Generating Franchise Time Zones Reference Seed (48 rows)...")
-    tz_rows = []
-    for r in data:  # We can pull franchise cities from fran_query result
-        pass
-    # Re-iterate franchises for timezone mapping:
     _, fran_data = execute_query(w, warehouse_id, "SELECT franchiseID, city FROM samples.bakehouse.sales_franchises ORDER BY franchiseID")
     tz_cols = ["franchise_id", "time_zone"]
     tz_data = []
@@ -175,6 +175,132 @@ def stage_batch2(w: WorkspaceClient, catalog: str, warehouse_id: str):
     print(f"Uploaded {len(data)} rows to {path}")
     print("Batch 2 staging completed successfully.\n")
 
+def stage_dim_batch2(w: WorkspaceClient, catalog: str, warehouse_id: str):
+    print("=== Staging Dimension Batch 2 (SCD Type 2 Evolution & Soft Delete) ===")
+    base_vol = f"/Volumes/{catalog}/landing/extracts"
+
+    # 1. Customers: 5 updated, 3 inserted -> 303 total rows
+    print("Staging Customers Batch 2 (5 updates, 3 inserts, batch_ts = 2024-05-15 00:00:00)...")
+    cust_query = """
+        SELECT customerID, first_name, last_name, email_address, phone_number, address, city, state, country, continent, postal_zip_code, gender
+        FROM samples.bakehouse.sales_customers
+        ORDER BY customerID
+    """
+    cols, data = execute_query(w, warehouse_id, cust_query)
+    updated_data = []
+    for r in data:
+        cid = int(r[0])
+        row_copy = list(r)
+        if cid == 2000000:
+            row_copy[3] = "updated.cust0@bakehouse-vip.com"
+            row_copy[5] = "100 New Baker Street"
+        elif cid == 2000001:
+            row_copy[3] = "updated.cust1@bakehouse-vip.com"
+            row_copy[5] = "200 New Baker Street"
+        elif cid == 2000002:
+            row_copy[3] = "updated.cust2@bakehouse-vip.com"
+            row_copy[5] = "300 New Baker Street"
+        elif cid == 2000003:
+            row_copy[3] = "updated.cust3@bakehouse-vip.com"
+            row_copy[5] = "400 New Baker Street"
+        elif cid == 2000004:
+            row_copy[3] = "updated.cust4@bakehouse-vip.com"
+            row_copy[5] = "500 New Baker Street"
+        updated_data.append(row_copy)
+    
+    # Add 3 new synthetic customers
+    updated_data.append(["2009001", "Alice", "Morgan", "alice.morgan@bakehouse.test", "555-0191", "10 Alpha Way", "Austin", "TX", "USA", "North America", "78701", "Female"])
+    updated_data.append(["2009002", "Bob", "Chen", "bob.chen@bakehouse.test", "555-0192", "20 Beta Ave", "Denver", "CO", "USA", "North America", "80202", "Male"])
+    updated_data.append(["2009003", "Carlos", "Silva", "carlos.silva@bakehouse.test", "555-0193", "30 Gamma Blvd", "Miami", "FL", "USA", "North America", "33101", "Male"])
+
+    csv_bytes = to_csv_bytes(cols, updated_data)
+    path = f"{base_vol}/customers/customers_2024051500.csv"
+    w.files.upload(path, io.BytesIO(csv_bytes), overwrite=True)
+    print(f"Uploaded {len(updated_data)} rows to {path}")
+
+    # 2. Suppliers: 1 missing supplier (supplierID = 4000010 removed) -> 26 rows
+    print("Staging Suppliers Batch 2 (supplierID = 4000010 removed, batch_ts = 2024-05-15 00:00:00)...")
+    supp_query = """
+        SELECT supplierID, name, ingredient, continent, city, district, size, longitude, latitude, approved
+        FROM samples.bakehouse.sales_suppliers
+        WHERE supplierID != 4000010
+        ORDER BY supplierID
+    """
+    cols, data = execute_query(w, warehouse_id, supp_query)
+    csv_bytes = to_csv_bytes(cols, data)
+    path = f"{base_vol}/suppliers/suppliers_2024051500.csv"
+    w.files.upload(path, io.BytesIO(csv_bytes), overwrite=True)
+    print(f"Uploaded {len(data)} rows to {path}")
+    print("Dimension Batch 2 staging completed.\n")
+
+def stage_dim_batch3(w: WorkspaceClient, catalog: str, warehouse_id: str):
+    print("=== Staging Dimension Batch 3 (Reactivations & Multi-version) ===")
+    base_vol = f"/Volumes/{catalog}/landing/extracts"
+
+    # 1. Customers: customer 2000000 updated again -> 303 total rows
+    print("Staging Customers Batch 3 (customerID = 2000000 updated again, batch_ts = 2024-05-16 00:00:00)...")
+    cust_query = """
+        SELECT customerID, first_name, last_name, email_address, phone_number, address, city, state, country, continent, postal_zip_code, gender
+        FROM samples.bakehouse.sales_customers
+        ORDER BY customerID
+    """
+    cols, data = execute_query(w, warehouse_id, cust_query)
+    updated_data = []
+    for r in data:
+        cid = int(r[0])
+        row_copy = list(r)
+        if cid == 2000000:
+            row_copy[3] = "cust0.latest@bakehouse-executive.com"
+            row_copy[5] = "999 Executive Way"
+        elif cid in (2000001, 2000002, 2000003, 2000004):
+            idx = cid - 2000000
+            row_copy[3] = f"updated.cust{idx}@bakehouse-vip.com"
+            row_copy[5] = f"{idx+1}00 New Baker Street"
+        updated_data.append(row_copy)
+    
+    updated_data.append(["2009001", "Alice", "Morgan", "alice.morgan@bakehouse.test", "555-0191", "10 Alpha Way", "Austin", "TX", "USA", "North America", "78701", "Female"])
+    updated_data.append(["2009002", "Bob", "Chen", "bob.chen@bakehouse.test", "555-0192", "20 Beta Ave", "Denver", "CO", "USA", "North America", "80202", "Male"])
+    updated_data.append(["2009003", "Carlos", "Silva", "carlos.silva@bakehouse.test", "555-0193", "30 Gamma Blvd", "Miami", "FL", "USA", "North America", "33101", "Male"])
+
+    csv_bytes = to_csv_bytes(cols, updated_data)
+    path = f"{base_vol}/customers/customers_2024051600.csv"
+    w.files.upload(path, io.BytesIO(csv_bytes), overwrite=True)
+    print(f"Uploaded {len(updated_data)} rows to {path}")
+
+    # 2. Suppliers: supplier 4000010 restored -> 27 rows
+    print("Staging Suppliers Batch 3 (supplierID = 4000010 restored, batch_ts = 2024-05-16 00:00:00)...")
+    supp_query = """
+        SELECT supplierID, name, ingredient, continent, city, district, size, longitude, latitude, approved
+        FROM samples.bakehouse.sales_suppliers
+        ORDER BY supplierID
+    """
+    cols, data = execute_query(w, warehouse_id, supp_query)
+    csv_bytes = to_csv_bytes(cols, data)
+    path = f"{base_vol}/suppliers/suppliers_2024051600.csv"
+    w.files.upload(path, io.BytesIO(csv_bytes), overwrite=True)
+    print(f"Uploaded {len(data)} rows to {path}")
+
+    # 3. Franchises: franchiseID = 3000002 attribute update (size = 'Mega') -> 48 rows
+    print("Staging Franchises Batch 3 (franchiseID = 3000002 size='Mega', batch_ts = 2024-05-16 00:00:00)...")
+    fran_query = """
+        SELECT franchiseID, name, city, district, zipcode, country, size, longitude, latitude, supplierID
+        FROM samples.bakehouse.sales_franchises
+        ORDER BY franchiseID
+    """
+    cols, data = execute_query(w, warehouse_id, fran_query)
+    fran_updated = []
+    for r in data:
+        row_copy = list(r)
+        if int(row_copy[0]) == 3000002:
+            row_copy[6] = "Mega"
+        fran_updated.append(row_copy)
+    
+    csv_bytes = to_csv_bytes(cols, fran_updated)
+    path = f"{base_vol}/franchises/franchises_2024051600.csv"
+    w.files.upload(path, io.BytesIO(csv_bytes), overwrite=True)
+    print(f"Uploaded {len(fran_updated)} rows to {path}")
+    print("Dimension Batch 3 staging completed.\n")
+
 def clean_extracts(w: WorkspaceClient, catalog: str):
     print(f"Cleaning extract files in /Volumes/{catalog}/landing/extracts...")
     base_vol = f"/Volumes/{catalog}/landing/extracts"
@@ -192,7 +318,7 @@ def main():
     parser.add_argument("--profile", default="dev", help="Databricks CLI profile")
     parser.add_argument("--catalog", default="bakehouse_dev", help="Target catalog")
     parser.add_argument("--warehouse-id", default="3c88b7bfb51daab1", help="SQL Warehouse ID")
-    parser.add_argument("--stage", choices=["batch1", "batch2", "all", "clean"], required=True)
+    parser.add_argument("--stage", choices=["batch1", "batch2", "dim_batch2", "dim_batch3", "all", "clean"], required=True)
     args = parser.parse_args()
 
     w = WorkspaceClient(profile=args.profile)
@@ -203,6 +329,10 @@ def main():
         stage_batch1(w, args.catalog, args.warehouse_id)
     elif args.stage == "batch2":
         stage_batch2(w, args.catalog, args.warehouse_id)
+    elif args.stage == "dim_batch2":
+        stage_dim_batch2(w, args.catalog, args.warehouse_id)
+    elif args.stage == "dim_batch3":
+        stage_dim_batch3(w, args.catalog, args.warehouse_id)
     elif args.stage == "all":
         stage_batch1(w, args.catalog, args.warehouse_id)
         stage_batch2(w, args.catalog, args.warehouse_id)

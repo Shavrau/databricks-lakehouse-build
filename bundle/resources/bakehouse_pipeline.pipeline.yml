@@ -13,3 +13,5 @@ resources:
       libraries:
         - file:
             path: ../src/bronze/bronze_tables.py
+        - file:
+            path: ../src/silver/silver_tables.py
