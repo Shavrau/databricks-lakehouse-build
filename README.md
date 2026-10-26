@@ -4,28 +4,30 @@
 
 ---
 
-## 📌 Visão Geral do Projeto
+## 📌 Project Overview
 
-Este repositório documenta e implementa a construção completa do Lakehouse para a **Bakehouse** (uma franquia global de cookies), abrangendo desde o discovery, governança e modelagem de dados até orquestração de pipelines e consumo analítico.
+This repository documents and implements a production-grade Lakehouse solution for **Bakehouse** (a global cookie franchise), spanning discovery, governance, dimensional data modeling, automated pipeline orchestration, and business intelligence consumption.
 
-O projeto foi desenhado sob as melhores práticas recomendadas de engenharia de dados da Databricks:
-- **Separação de Camadas (Medallion Pattern):** Bronze (raw/auditável), Silver (limpa, deduplicada, enriquecida e historizada) e Gold (modelagem dimensional e agregados de negócio).
-- **Unity Catalog & Governança:** Controle de acesso granular baseado em perfis (RBAC), anonimização/mascaramento de dados sensíveis (PII) e isolamento de catálogo.
-- **Historização Avançada:** Implementação de **SCD Tipo 2** (Slowly Changing Dimensions) e padrões de *Soft Delete* para rastreabilidade temporal.
-- **Otimização de Performance:** Uso de *Liquid Clustering*, *Auto-Compaction*, *OPTIMIZE* e particionamento inteligente com Delta Lake.
-- **Orquestração e CI/CD:** Master DAG de orquestração via Lakeflow Jobs / Databricks Asset Bundles (DABs).
+Built adhering to modern Databricks engineering best practices:
+- **Medallion Pattern Separation:** 
+  - **Bronze:** Raw, append-only ingestion with audit metadata (`_ingested_at`).
+  - **Silver:** Cleaned, validated, deduplicated, and conformed entities with **SCD Type 2** for customer history and soft-delete semantics for franchises and suppliers.
+  - **Gold:** Star schema dimension/fact tables (`gold_core`) and consumer-facing curated views (`gold_consumer`).
+- **Unity Catalog & Enterprise Governance:** Granular Role-Based Access Control (RBAC), PII data masking, isolation across schemas, and full lineage tracking.
+- **Delta Lake Optimization:** Liquid Clustering, Auto-Compaction, automated `OPTIMIZE` and `VACUUM` policies, and Bloom filter indexes for low-latency queries.
+- **Declarative Automation & CI/CD:** End-to-end master DAG orchestration powered by Databricks Asset Bundles (DABs) and Lakeflow Jobs.
 
 ---
 
-## 🏛️ Arquitetura da Solução
+## 🏛️ Solution Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Ingestion [" Ingestão & Landing "]
+    subgraph Ingestion [" Landing & Ingestion "]
         L[CSV Landing Volumes / samples.bakehouse]
     end
 
-    subgraph Bronze [" Camada Bronze (Raw & Audit) "]
+    subgraph Bronze [" Bronze Layer (Raw & Audit) "]
         B1[(bronze.transactions)]
         B2[(bronze.customers)]
         B3[(bronze.suppliers)]
@@ -33,14 +35,14 @@ flowchart LR
         B5[(bronze.franchise_time_zones)]
     end
 
-    subgraph Silver [" Camada Silver (Enriched & Conformed) "]
+    subgraph Silver [" Silver Layer (Enriched & Conformed) "]
         S1[(silver.fct_transactions<br/>Deduped)]
         S2[(silver.dim_customers<br/>SCD Type 2)]
         S3[(silver.dim_suppliers<br/>Soft Delete)]
         S4[(silver.dim_franchises<br/>Soft Delete + Timezone)]
     end
 
-    subgraph Gold [" Camada Gold (Curated & Business Views) "]
+    subgraph Gold [" Gold Layer (Curated & Consumer Views) "]
         G1[(gold_core.dim / fct)]
         G2[gold_consumer.v_franchise_sales_daily]
         G3[gold_consumer.v_customer_sales_as_at]
@@ -58,62 +60,62 @@ flowchart LR
 
 ---
 
-## 📂 Estrutura do Repositório
+## 📂 Repository Structure
 
 ```text
-├── 01_discovery_scoping/               # Documentação de escopo, personas e matriz de requisitos
-├── 02_foundation_kickoff/              # Planejamento de compute, chaves, tempo e guardrails
-├── 03_bronze/                          # Pipelines de ingestão Bronze, metadados e DDLs
-├── 04_silver/                          # Transformações Silver, SCD Tipo 2, soft-delete e testes
-├── 05_gold/                            # Modelagem dimensional Gold, consumer views e segurança
-├── 06_optimization_governance_close/   # Runbooks, otimizações Delta, guias de usuário e sign-off
-├── bundle/                             # Configurações do Databricks Asset Bundle (DABs)
-├── implementation_plan.md              # Plano de implementação detalhado por fases
-└── LICENSE                             # Licença MIT
+├── 01_discovery_scoping/               # Scope definition, persona matrix, and architectural boundaries
+├── 02_foundation_kickoff/              # Compute sizing, keys, temporal design, and governance guardrails
+├── 03_bronze/                          # Ingestion DDLs, volume configurations, and Bronze test suites
+├── 04_silver/                          # Silver transformation logic, SCD Type 2 merge, and quality gates
+├── 05_gold/                            # Star schema modeling, consumer reporting views, and data masks
+├── 06_optimization_governance_close/   # Runbooks, Delta tuning, acceptance test reports, and sign-offs
+├── bundle/                             # Databricks Asset Bundle (DABs) resources and target configurations
+├── implementation_plan.md              # Phase-by-phase implementation tracking & milestone plan
+└── LICENSE                             # MIT License
 ```
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## 🛠️ Technology Stack
 
-- **Plataforma:** Databricks (Serverless Compute / SQL Warehouses)
-- **Engine & Formato:** Apache Spark & Delta Lake
-- **Governança:** Unity Catalog (RBAC, Data Masking, Lineage)
-- **Orquestração & Infra:** Databricks Asset Bundles (DABs), Lakeflow Jobs
-- **Linguagens:** SQL (Databricks DBSQL), Python (PySpark)
+- **Platform:** Databricks (Serverless Compute, DBSQL Serverless Warehouses)
+- **Engine & Storage:** Apache Spark & Delta Lake
+- **Governance:** Unity Catalog (RBAC, Dynamic Column Masks, Row Filters, Lineage)
+- **Orchestration & DevOps:** Databricks Asset Bundles (DABs), Lakeflow Jobs
+- **Languages:** SQL (Databricks SQL / DBSQL), Python (PySpark)
 
 ---
 
-## 🚀 Como Executar o Projeto
+## 🚀 Deployment & Execution
 
-### Pré-requisitos
-- Databricks CLI configurado (`databricks auth login`)
-- Acesso a um workspace Databricks com Unity Catalog habilitado
+### Prerequisites
+- Databricks CLI v0.200+ / v1.x configured (`databricks auth login`)
+- Target Databricks Workspace with Unity Catalog enabled
 
-### Validação e Deploy com DABs
+### Build and Deploy via DABs
 ```bash
-# Validar configurações do bundle
+# Validate bundle configuration
 databricks bundle validate
 
-# Fazer o deploy para ambiente de desenvolvimento
+# Deploy bundle to development target
 databricks bundle deploy -t dev
 
-# Executar a pipeline principal
+# Run end-to-end orchestration job
 databricks bundle run bakehouse_pipeline -t dev
 ```
 
 ---
 
-## 👥 Persona & Guias de Uso
+## 👥 Personas & Operating Guides
 
-Documentação dedicada e runbooks operacionais disponíveis na pasta [`06_optimization_governance_close/user_guides/`](06_optimization_governance_close/user_guides/):
-- **Analistas:** [`01_analysts_guide.md`](06_optimization_governance_close/user_guides/01_analysts_guide.md)
-- **Desenvolvedores BI:** [`02_bi_developers_guide.md`](06_optimization_governance_close/user_guides/02_bi_developers_guide.md)
-- **Engenheiros de Dados:** [`03_data_engineers_guide.md`](06_optimization_governance_close/user_guides/03_data_engineers_guide.md)
-- **Operações & Plataforma:** [`04_platform_operators_guide.md`](06_optimization_governance_close/user_guides/04_platform_operators_guide.md)
+Comprehensive operating procedures and playbooks are located in [`06_optimization_governance_close/user_guides/`](06_optimization_governance_close/user_guides/):
+- **Data Analysts:** [`01_analysts_guide.md`](06_optimization_governance_close/user_guides/01_analysts_guide.md)
+- **BI & Dashboard Developers:** [`02_bi_developers_guide.md`](06_optimization_governance_close/user_guides/02_bi_developers_guide.md)
+- **Data Engineers:** [`03_data_engineers_guide.md`](06_optimization_governance_close/user_guides/03_data_engineers_guide.md)
+- **Platform Operators & SREs:** [`04_platform_operators_guide.md`](06_optimization_governance_close/user_guides/04_platform_operators_guide.md)
 
 ---
 
-## 📄 Licença
+## 📄 License
 
-Este projeto está sob a licença [MIT](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
